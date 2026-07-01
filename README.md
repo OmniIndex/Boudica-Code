@@ -185,6 +185,138 @@ Choice: 3
 [program output]
 ```
 
+## Multi-File Project Creation
+
+### Current Pattern: Sequential Generation ✓
+
+BoudicaCode supports complex, multi-file projects by generating files sequentially with full context awareness. This approach works well for:
+- Backend services with multiple layers (OAuth, database, API)
+- Library structures with headers and implementations
+- Test suites alongside source code
+- Large applications with modular organization
+
+### How It Works
+
+Each file is generated independently, but with enough context, Boudica AI ensures:
+- Consistent imports and includes
+- Proper function signatures across files
+- Coordinated class/module organization
+- Automatic discovery via CMakeLists.txt (C++) or build configuration
+
+### Example: C++ Backend with OAuth, Database, and File Processing
+
+This real-world example shows how to build a complete backend system:
+
+```bash
+# 1. Create the project
+Choice: n
+Project name: file_processor
+Stack: 5 (C++)
+
+# 2. Create headers first (so implementations can reference them)
+file_processor> create include/oauth.h: 
+  OAuth client for Google Drive API authentication. Includes token management, 
+  refresh token handling, and authorization code exchange.
+
+file_processor> create include/database.h:
+  Database abstraction layer for SQLite. Methods for storing summaries, 
+  retrieving file history, and managing user sessions.
+
+file_processor> create include/boudica.h:
+  Integration coordinator that orchestrates OAuth flow, file retrieval from 
+  Google Drive, summary generation, and database storage.
+
+# 3. Create implementations (referencing the headers)
+file_processor> create src/oauth.cpp:
+  Implement Google Drive OAuth using libcurl and nlohmann/json. Use 
+  #include "oauth.h". Handle token lifecycle and API requests.
+
+file_processor> create src/database.cpp:
+  Implement SQLite database operations. Use #include "database.h". 
+  Create tables for files, summaries, and user sessions.
+
+file_processor> create src/boudica.cpp:
+  Orchestration layer that uses #include "oauth.h" and #include "database.h". 
+  Coordinates the complete workflow: authenticate → retrieve file → 
+  generate summary → store in database.
+
+file_processor> create src/main.cpp:
+  Entry point. Parse command-line arguments for file path. Include 
+  "boudica.h". Call BoudicaCoordinator to execute the complete workflow.
+
+# 4. Build (CMakeLists.txt auto-discovers all src/*.cpp files)
+file_processor> build
+✅ Build successful!
+```
+
+### Why This Works
+
+**CMakeLists.txt Auto-Discovery** 
+BoudicaCode generates CMakeLists.txt with:
+```cmake
+file(GLOB SOURCES "src/*.cpp" "*.cpp")
+add_executable(project_name ${SOURCES})
+target_include_directories(project_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+```
+
+This automatically includes all new .cpp files you create—no manual updates needed.
+
+### Best Practices for Multi-File Projects
+
+1. **Create Headers First**
+   - Declares interfaces before implementations
+   - Gives Boudica full context for implementations
+   - Ensures function signatures are consistent
+
+2. **Reference Headers in Descriptions**
+   - When creating implementation files, mention "Use #include "header.h""
+   - This ensures proper coordination
+
+3. **Describe Interactions Clearly**
+   - Explain which files call which functions
+   - Example: "src/main.cpp calls BoudicaCoordinator::run() from boudica.h"
+   - Helps Boudica generate coordinated code
+
+4. **Build After Each Major Component**
+   - After implementing a layer (e.g., OAuth + database)
+   - Catch integration issues early
+   - Use auto-fix if compilation fails
+
+### Current Limitations & Future Enhancements
+
+**Current (MVP):**
+- ✅ Sequential file creation with AI context
+- ✅ CMakeLists.txt auto-discovery
+- ✅ Individual file optimization
+- ❌ No batched multi-file generation
+- ❌ No automatic #include coordination
+
+**Planned (v1.1+):**
+- Multi-file generation in single request: `create --batch [files]: description`
+- Template-based scaffolding: `scaffold express-api` auto-generates route structure
+- Automatic header/implementation coordination
+- Dependency graph validation
+
+### Workflow Comparison
+
+**Single-File Project:**
+```
+create src/main.py: Simple CLI app
+build
+run
+```
+
+**Multi-File Project:**
+```
+create include/api.h: API client interface
+create src/api.cpp: API client implementation
+create src/main.cpp: Entry point using api.h
+build
+run
+```
+
+Both use the same commands—just organize your creation sequence logically (headers → implementations → main).
+
 ## Supported Technologies
 
 ### Languages
