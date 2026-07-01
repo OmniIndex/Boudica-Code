@@ -80,10 +80,6 @@ class BoudicaClient:
         """
         self.config = config or BoudicaConfig()
         self.session = requests.Session()
-        if self.config.api_key:
-            self.session.headers.update({
-                "Authorization": f"Bearer {self.config.api_key}"
-            })
     
     def _request(self, method: str, endpoint: str, data: Optional[Dict] = None,
                 params: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
@@ -111,10 +107,22 @@ class BoudicaClient:
         headers['Content-Type'] = 'application/json'
         
         # Add user_id to params if configured
-        if self.config.user_id and not params:
-            params = {'user_id': self.config.user_id}
-        elif self.config.user_id and params and 'user_id' not in params:
+        if not params:
+            params = {}
+        if self.config.user_id and 'user_id' not in params:
             params['user_id'] = self.config.user_id
+        if self.config.api_key and 'api_key' not in params:
+            params['api_key'] = self.config.api_key
+        
+        # Debug: Show what we're sending
+        debug_params = params.copy()
+        if 'api_key' in debug_params:
+            debug_params['api_key'] = debug_params['api_key'][:20] + '...' if len(debug_params['api_key']) > 20 else debug_params['api_key']
+        print(f"[DEBUG] Request: {method} {endpoint}")
+        print(f"[DEBUG] URL: {url}")
+        print(f"[DEBUG] Params: {debug_params}")
+        print(f"[DEBUG] API Key present: {'api_key' in params}")
+        print(f"[DEBUG] User ID: {params.get('user_id', 'NOT SET')}")
         
         try:
             response = self.session.request(
@@ -182,13 +190,18 @@ class BoudicaClient:
             response = client.generate("Once upon a time", max_tokens=100)
             print(response)
         """
-        data = {"prompt": prompt}
+        # WORKAROUND: Use /chat endpoint instead of /generate to preserve user_id
+        # (generates logs correctly; /generate endpoint loses user_id to "anonymous")
+        data = {"message": prompt}
         if max_tokens:
-            data["max_length"] = max_tokens  # API maps max_length to max_tokens
+            data["max_tokens"] = max_tokens
         if temperature is not None:
             data["temperature"] = temperature
         data.update(kwargs)
-        return self._request("POST", "/generate", data=data)
+        
+        # Explicitly pass params with user_id, like chat() does
+        params = {"user_id": self.config.user_id}
+        return self._request("POST", "/chat", data=data, params=params)
     
     # ─── System Information Endpoints ───────────────────────────────────────
     
@@ -203,7 +216,8 @@ class BoudicaClient:
             status = client.health()
             print(status)
         """
-        return self._request("GET", "/health")
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
+        return self._request("GET", "/health", params=params)
     
     def models(self) -> Dict[str, Any]:
         """
@@ -217,7 +231,8 @@ class BoudicaClient:
             for model in models.get('models', []):
                 print(model['name'])
         """
-        return self._request("GET", "/models")
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
+        return self._request("GET", "/models", params=params)
     
     # ─── User Management Endpoints ───────────────────────────────────────────
     
@@ -255,7 +270,8 @@ class BoudicaClient:
             users = client.users_list()
             print(len(users.get('users', [])))
         """
-        return self._request("GET", "/users")
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
+        return self._request("GET", "/users", params=params)
     
     # ─── Message Management Endpoints ────────────────────────────────────────
     
@@ -284,8 +300,9 @@ class BoudicaClient:
             data["message_id"] = message_id
         data.update(kwargs)
         
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
         method = "POST" if data else "GET"
-        return self._request(method, "/messages", data=data if method == "POST" else None)
+        return self._request(method, "/messages", data=data if method == "POST" else None, params=params)
     
     # ─── Shared Chat Endpoints ──────────────────────────────────────────────
     
@@ -314,8 +331,9 @@ class BoudicaClient:
             data["chat_id"] = chat_id
         data.update(kwargs)
         
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
         method = "POST" if data else "GET"
-        return self._request(method, "/shared_chats", data=data if method == "POST" else None)
+        return self._request(method, "/shared_chats", data=data if method == "POST" else None, params=params)
     
     # ─── OAuth Integration Endpoints ────────────────────────────────────────
     
@@ -393,7 +411,8 @@ class BoudicaClient:
             "service": service,
             "user_id": user_id or self.config.user_id
         }
-        return self._request("POST", "/oauth/disconnect", data=data)
+        params = {"user_id": user_id or self.config.user_id} if (user_id or self.config.user_id) else None
+        return self._request("POST", "/oauth/disconnect", data=data, params=params)
     
     # ─── OAuth Admin Management Endpoints ────────────────────────────────────
     
@@ -429,13 +448,17 @@ class BoudicaClient:
         if action:
             data["action"] = action
         
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
         method = "POST" if action == "disconnect" else "GET"
-        params = {"action": action} if action and method == "GET" else None
         
         if method == "GET":
+            if not params:
+                params = {}
+            if action:
+                params["action"] = action
             return self._request("GET", "/oauth/admin", params=params)
         else:
-            return self._request("POST", "/oauth/admin", data=data)
+            return self._request("POST", "/oauth/admin", data=data, params=params)
     
     def oauth_app_list(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -498,7 +521,8 @@ class BoudicaClient:
         if extra_params:
             data["extra_params"] = extra_params
         
-        return self._request("POST", "/oauth/app/register", data=data)
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
+        return self._request("POST", "/oauth/app/register", data=data, params=params)
     
     def oauth_app_delete(self, service_name: str) -> Dict[str, Any]:
         """
@@ -514,7 +538,8 @@ class BoudicaClient:
             result = client.oauth_app_delete(service_name='my_service')
         """
         data = {"service_name": service_name}
-        return self._request("POST", "/oauth/app/delete", data=data)
+        params = {"user_id": self.config.user_id} if self.config.user_id else None
+        return self._request("POST", "/oauth/app/delete", data=data, params=params)
     
     # ─── Agent Management Endpoints ──────────────────────────────────────────
     

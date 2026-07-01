@@ -35,6 +35,96 @@ def ensure_trailing_newline(content: str) -> str:
     return content.rstrip() + "\n"
 
 
+def get_file_extension(filepath: str) -> str:
+    """Get file extension from filepath"""
+    return Path(filepath).suffix.lower()
+
+
+def load_templates() -> Tuple[Optional[str], Optional[str]]:
+    """Load header and footer templates from ~/boudica_code/
+    
+    Returns:
+        Tuple of (header_template, footer_template) or (None, None) if not found
+    """
+    template_dir = Path.home() / "boudica_code"
+    header_file = template_dir / "header_template"
+    footer_file = template_dir / "footer_template"
+    
+    header = None
+    footer = None
+    
+    if header_file.exists():
+        try:
+            with open(header_file, 'r') as f:
+                header = f.read().strip()
+        except Exception:
+            pass
+    
+    if footer_file.exists():
+        try:
+            with open(footer_file, 'r') as f:
+                footer = f.read().strip()
+        except Exception:
+            pass
+    
+    return header, footer
+
+
+def format_template_with_comments(template: str, filepath: str) -> str:
+    """Format template with appropriate comment syntax for the file type
+    
+    Args:
+        template: The template text to format
+        filepath: The filepath to determine comment style
+    
+    Returns:
+        Template wrapped in appropriate comment syntax with placeholders replaced
+    """
+    ext = get_file_extension(filepath)
+    
+    # Replace placeholders in template
+    processed_template = template
+    
+    # Replace <date> with current date and time
+    current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    processed_template = processed_template.replace("<date>", current_datetime)
+    
+    # Replace <file> with the filename (without path)
+    filename = Path(filepath).name
+    processed_template = processed_template.replace("<file>", filename)
+    
+    # Comment styles for different languages
+    if ext in ['.py', '.sh']:
+        # Python, Bash: use # for comments
+        lines = processed_template.split('\n')
+        commented = '\n'.join(f"# {line}" if line.strip() else "#" for line in lines)
+        return commented
+    
+    elif ext in ['.java']:
+        # Java: use // for comments
+        lines = processed_template.split('\n')
+        commented = '\n'.join(f"// {line}" if line.strip() else "//" for line in lines)
+        return commented
+    
+    elif ext in ['.cpp', '.h', '.hpp', '.ts', '.tsx', '.js', '.jsx']:
+        # C++, TypeScript, JavaScript: use // for comments
+        lines = processed_template.split('\n')
+        commented = '\n'.join(f"// {line}" if line.strip() else "//" for line in lines)
+        return commented
+    
+    elif ext in ['.bat', '.cmd']:
+        # Windows Batch: use REM for comments
+        lines = processed_template.split('\n')
+        commented = '\n'.join(f"REM {line}" if line.strip() else "REM" for line in lines)
+        return commented
+    
+    else:
+        # Default: treat as text file, use # style
+        lines = processed_template.split('\n')
+        commented = '\n'.join(f"# {line}" if line.strip() else "#" for line in lines)
+        return commented
+
+
 class ProjectManager:
     """Manages project structure, file operations, and builds"""
     
@@ -236,19 +326,58 @@ class ProjectManager:
         }
     
     def create_file(self, filepath: str, content: str) -> bool:
-        """Create a new file in the project"""
+        """Create a new file in the project with optional header/footer templates"""
         file_path = self.project_dir / filepath
         file_path.parent.mkdir(parents=True, exist_ok=True)
         
         try:
+            # Load templates if they exist
+            header_template, footer_template = load_templates()
+            
+            # Build final content with templates
+            final_content = content
+            
+            # Add header template if it exists (skip for certain files)
+            if header_template and not self._should_skip_templates(filepath):
+                formatted_header = format_template_with_comments(header_template, filepath)
+                final_content = formatted_header + "\n\n" + final_content
+            
+            # Add footer template if it exists (skip for certain files)
+            if footer_template and not self._should_skip_templates(filepath):
+                formatted_footer = format_template_with_comments(footer_template, filepath)
+                final_content = final_content + "\n\n" + formatted_footer
+            
             # Ensure content ends with proper newline
-            normalized_content = ensure_trailing_newline(content)
+            normalized_content = ensure_trailing_newline(final_content)
             with open(file_path, 'w') as f:
                 f.write(normalized_content)
             return True
         except Exception as e:
             print(f"Error creating file: {e}")
             return False
+    
+    def _should_skip_templates(self, filepath: str) -> bool:
+        """Check if file should skip template injection
+        
+        Skip templates for config files, build files, and non-code files
+        """
+        skip_files = [
+            'CMakeLists.txt', 'package.json', 'setup.py', 'pom.xml',
+            '.gitignore', 'README.md', 'requirements.txt',
+            'tsconfig.json', '.boudica_project.json', 'Makefile'
+        ]
+        
+        filename = Path(filepath).name
+        
+        # Skip if filename matches skip list
+        if filename in skip_files:
+            return True
+        
+        # Skip if it's a config or build file
+        if filename.startswith('.') and filename != '.gitignore':
+            return True
+        
+        return False
     
     def read_file(self, filepath: str) -> Optional[str]:
         """Read file contents"""
@@ -276,9 +405,27 @@ class ProjectManager:
         return True
     
     def _write_file(self, filepath: Path, content: str) -> bool:
-        """Helper method to write file with proper formatting (ensures trailing newline)"""
+        """Helper method to write file with proper formatting and optional templates"""
         try:
-            normalized_content = ensure_trailing_newline(content)
+            # Load templates if they exist
+            header_template, footer_template = load_templates()
+            
+            # Build final content with templates
+            final_content = content
+            
+            # Add header template if it exists (skip for certain files)
+            file_str = str(filepath)
+            if header_template and not self._should_skip_templates(file_str):
+                formatted_header = format_template_with_comments(header_template, file_str)
+                final_content = formatted_header + "\n\n" + final_content
+            
+            # Add footer template if it exists (skip for certain files)
+            if footer_template and not self._should_skip_templates(file_str):
+                formatted_footer = format_template_with_comments(footer_template, file_str)
+                final_content = final_content + "\n\n" + formatted_footer
+            
+            # Ensure content ends with proper newline
+            normalized_content = ensure_trailing_newline(final_content)
             with open(filepath, 'w') as f:
                 f.write(normalized_content)
             return True

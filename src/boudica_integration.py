@@ -12,7 +12,7 @@ from typing import Dict, Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from boudica_mod import BoudicaClient, BoudicaConfig, BoudicaError
+from boudica_mod import create_client, BoudicaError
 from git_integration import GitIntegration
 
 
@@ -48,14 +48,12 @@ class BoudicaCodegen:
             print("="*80 + "\n")
             sys.exit(1)
         
-        config = BoudicaConfig(
+        # Use create_client() function like in boudica_examples.py
+        self.client = create_client(
             base_url=base_url,
             api_key=api_key,
-            user_id=user_id,
-            timeout=300
+            user_id=user_id
         )
-        
-        self.client = BoudicaClient(config)
         self.model = 'mistral-large-675b'  # Current base model
         self.max_retries = 3
         self.last_error = None  # Store last error for debugging
