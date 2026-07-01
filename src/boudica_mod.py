@@ -114,16 +114,6 @@ class BoudicaClient:
         if self.config.api_key and 'api_key' not in params:
             params['api_key'] = self.config.api_key
         
-        # Debug: Show what we're sending
-        debug_params = params.copy()
-        if 'api_key' in debug_params:
-            debug_params['api_key'] = debug_params['api_key'][:20] + '...' if len(debug_params['api_key']) > 20 else debug_params['api_key']
-        print(f"[DEBUG] Request: {method} {endpoint}")
-        print(f"[DEBUG] URL: {url}")
-        print(f"[DEBUG] Params: {debug_params}")
-        print(f"[DEBUG] API Key present: {'api_key' in params}")
-        print(f"[DEBUG] User ID: {params.get('user_id', 'NOT SET')}")
-        
         try:
             response = self.session.request(
                 method, url, json=data, params=params,
