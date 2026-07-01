@@ -264,8 +264,9 @@ CRITICAL: This code runs on {current_os}.
 Output only the complete working code. No markdown, no explanations, no markdown code blocks."""
         
         try:
-            response = self.client.generate(
-                prompt=prompt,
+            # Use /chat endpoint for iterative code generation with context
+            response = self.client.chat(
+                message=prompt,
                 max_tokens=8192,
                 temperature=0.7,
                 model=self.model
@@ -333,8 +334,9 @@ CRITICAL INSTRUCTIONS:
 6. NO explanation, NO markdown, NO code blocks - ONLY the complete modified code"""
         
         try:
-            response = self.client.generate(
-                prompt=prompt,
+            # Use /chat endpoint for iterative code editing with conversation context
+            response = self.client.chat(
+                message=prompt,
                 max_tokens=8192,
                 temperature=0.5,  # Lower temperature for edits
                 model=self.model

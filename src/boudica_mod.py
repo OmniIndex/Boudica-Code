@@ -190,18 +190,15 @@ class BoudicaClient:
             response = client.generate("Once upon a time", max_tokens=100)
             print(response)
         """
-        # WORKAROUND: Use /chat endpoint instead of /generate to preserve user_id
-        # (generates logs correctly; /generate endpoint loses user_id to "anonymous")
-        data = {"message": prompt}
+        data = {"prompt": prompt}
         if max_tokens:
             data["max_tokens"] = max_tokens
         if temperature is not None:
             data["temperature"] = temperature
         data.update(kwargs)
         
-        # Explicitly pass params with user_id, like chat() does
         params = {"user_id": self.config.user_id}
-        return self._request("POST", "/chat", data=data, params=params)
+        return self._request("POST", "/generate", data=data, params=params)
     
     # ─── System Information Endpoints ───────────────────────────────────────
     
