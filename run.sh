@@ -1,7 +1,7 @@
 #!/bin/bash
 # Quick start script for Boudica Code
-export BOUDICA_API_KEY="bdk_d69ed3b10d687b678b69c8efc29a0537a26dcdd13afd4f46e64498d5b4ad"
-export BOUDICA_USER_ID='sibain@omniindex.io'
+export BOUDICA_API_KEY=""
+export BOUDICA_USER_ID=''
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Create virtual environment if it doesn't exist
