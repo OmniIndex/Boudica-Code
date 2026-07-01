@@ -10,7 +10,7 @@ if [ ! -d "$SCRIPT_DIR/venv" ]; then
     python3 -m venv "$SCRIPT_DIR/venv"
 fi
 
-# Activate virtual environment
+# Activate virtual environment Python MUST be installed
 source "$SCRIPT_DIR/venv/bin/activate"
 
 # Install dependencies
