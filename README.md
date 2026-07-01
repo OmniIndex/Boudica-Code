@@ -47,7 +47,7 @@ BoudicaCode is an intelligent command-line tool that uses AI to generate, build,
 - **Automatic Repository Initialization**: Every project is initialized as a Git repository
 - **Automatic Commits**: First commit created during project scaffolding
 - **Language-Specific .gitignore**: Automatically generated for each language
-- **Config Persistence**: Git credentials stored in `~/.boudica_code/git_config.json`
+- **Config Persistence**: Git credentials stored in `~/boudica_code/git_config.json`
 - **Environment Variables**: Support for GIT_USER, GIT_EMAIL, GIT_SERVER, GIT_TOKEN
 
 ### 🚀 GitHub Actions CI/CD
@@ -342,6 +342,9 @@ Both use the same commands—just organize your creation sequence logically (hea
 │   ├── project1/
 │   ├── project2/
 │   └── ...
+├── header_template    # Default header template for file creation
+├── footer_template    # Default footer template for file creation
+├── git_config.json    # Git configuration
 └── sessions.db        # Session history database
 ```
 
@@ -439,7 +442,7 @@ GIT_TOKEN=your_github_token
 
 ```bash
 # Git configuration is persisted to:
-~/.boudica_code/git_config.json
+~/boudica_code/git_config.json
 
 # Project metadata:
 <project>/​.boudica_project.json
@@ -504,7 +507,7 @@ Git email: your.email@example.com
 
 These settings are:
 - Applied globally to your system
-- Persisted to `~/.boudica_code/git_config.json` for future sessions
+- Persisted to `~/boudica_code/git_config.json` for future sessions
 - Loaded from environment variables `GIT_USER` and `GIT_EMAIL` if set
 
 ### GitHub Actions Workflows
