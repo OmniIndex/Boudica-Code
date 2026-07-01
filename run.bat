@@ -2,8 +2,8 @@
 REM Quick start script for Boudica Code (Windows)
 setlocal enabledelayedexpansion
 
-set BOUDICA_API_KEY=bdk_d69ed3b10d687b678b69c8efc29a0537a26dcdd13afd4f46e64498d5b4ad
-set BOUDICA_USER_ID=sibain@omniindex.io
+set BOUDICA_API_KEY=
+set BOUDICA_USER_ID=
 
 REM Get the script directory
 set SCRIPT_DIR=%~dp0
