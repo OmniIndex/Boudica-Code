@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 set BOUDICA_API_KEY=
 set BOUDICA_USER_ID=
 
-REM Get the script directory
+REM Get the script directory. This is the directory that this bat runs in
 set SCRIPT_DIR=%~dp0
 
 REM Create virtual environment if it doesn't exist
