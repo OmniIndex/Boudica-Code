@@ -1,29 +1,47 @@
 @echo off
-REM Quick start script for Boudica Code (Windows)
 setlocal enabledelayedexpansion
 
 set BOUDICA_API_KEY=
 set BOUDICA_USER_ID=
 
-REM Get the script directory. This is the directory that this bat runs in
-set SCRIPT_DIR=%~dp0
+cd /d "%~dp0"
 
-REM Create virtual environment if it doesn't exist
-if not exist "%SCRIPT_DIR%venv\" (
-    echo Creating virtual environment...
-    python -m venv "%SCRIPT_DIR%venv"
+echo Boudica Code - Windows Launcher
+echo.
+
+REM Remove old venv completely (handles both Linux and Windows venvs)
+if exist "venv" (
+    echo Removing old virtual environment...
+    rmdir /s /q venv 2>nul
+    timeout /t 2 /nobreak >nul
+    if exist "venv" (
+        echo Retrying removal...
+        rmdir /s /q venv 2>nul
+    )
 )
 
-REM Activate virtual environment
-call "%SCRIPT_DIR%venv\Scripts\activate.bat"
+REM Create fresh Windows venv
+echo Creating new virtual environment...
+python -m venv venv
+if errorlevel 1 (
+    echo Error: Failed to create virtual environment
+    echo Make sure Python is installed in your PATH
+    pause
+    exit /b 1
+)
 
 REM Install dependencies
 echo Installing dependencies...
-pip install -q -r "%SCRIPT_DIR%requirements.txt"
+venv\Scripts\pip install -q -r requirements.txt
 
 REM Run the CLI
+echo Starting BoudicaCode...
 echo.
-python "%SCRIPT_DIR%src\main.py"
+venv\Scripts\python src\main.py
 
 endlocal
 pause
+
+
+
+
