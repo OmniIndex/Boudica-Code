@@ -57,7 +57,7 @@ class BoudicaConfig:
     base_url: str = "http://localhost/api/boudica"
     api_key: Optional[str] = None
     user_id: Optional[str] = None
-    timeout: int = 30
+    timeout: int = 500
     verify_ssl: bool = True
 
 
