@@ -23,6 +23,33 @@ from ui_handler import UIHandler
 from git_integration import GitIntegration
 
 
+def extract_filepath_from_command(command: str, project_manager: ProjectManager) -> Optional[str]:
+    """Extract filepath from natural language command like 'modify the file src/main.cpp add color'"""
+    
+    # Look for common patterns: "file src/main.cpp", "src/main.cpp", "./path/file.ext"
+    # Match: file/path with extension OR quoted paths
+    patterns = [
+        r'\bfile\s+([./\w\-]+\.\w+)',  # "file src/main.cpp"
+        r'([./]?[\w\-/]+\.[\w]+)',      # Direct path like "src/main.cpp"
+        r'"([^"]+\.[\w]+)"',             # Quoted path
+        r"'([^']+\.[\w]+)'",            # Single quoted path
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, command, re.IGNORECASE)
+        if match:
+            filepath = match.group(1)
+            # Verify file exists in project
+            try:
+                project_dir = project_manager.project_dir
+                if (project_dir / filepath).exists():
+                    return filepath
+            except:
+                pass
+    
+    return None
+
+
 def main():
     """Main CLI entry point"""
     
@@ -210,14 +237,37 @@ def interactive_session(session_manager: SessionManager, ui: UIHandler,
                 edit_keywords = ['change', 'modify', 'update', 'add', 'remove', 'fix', 'replace', 'implement', 'refactor', 'improve']
                 is_edit_request = any(keyword in command.lower() for keyword in edit_keywords)
                 
-                if current_file and is_edit_request:
-                    # Route to edit handler with current file and user request
-                    handle_edit_file_by_name(session_manager, ui, boudica, session, project_manager, 
-                                            current_file, command)
-                    current_file = None  # Clear context after edit
+                if is_edit_request:
+                    # Try to extract filepath from command (e.g., "modify the file src/main.cpp add color")
+                    extracted_file = extract_filepath_from_command(command, project_manager)
+                    
+                    if extracted_file:
+                        # Found file in command - use it directly
+                        handle_edit_file_by_name(session_manager, ui, boudica, session, project_manager, 
+                                                extracted_file, command)
+                        current_file = None
+                    elif current_file:
+                        # No file specified but we have context from previous command
+                        handle_edit_file_by_name(session_manager, ui, boudica, session, project_manager, 
+                                                current_file, command)
+                        current_file = None
+                    else:
+                        # No file found and no context - ask user
+                        ui.error("Which file would you like to edit? (e.g., 'modify src/main.cpp add color')")
+                        continue
                 else:
-                    # General planning discussion
-                    handle_planning_discussion(session_manager, ui, boudica, session, project_manager, command)
+                    # Check if this looks like a creation request (for a new file)
+                    create_keywords = ['application', 'program', 'function', 'method', 'class', 'service', 
+                                      'write', 'create', 'generate', 'build', 'design', 'implement', 'make',
+                                      'code', 'script', 'file', 'module', 'component']
+                    is_create_request = any(keyword in command.lower() for keyword in create_keywords)
+                    
+                    if is_create_request and not current_file:
+                        # Route to create file handler
+                        handle_create_file(session_manager, ui, boudica, session, project_manager, command)
+                    else:
+                        # General planning discussion
+                        handle_planning_discussion(session_manager, ui, boudica, session, project_manager, command)
         
         except KeyboardInterrupt:
             ui.info("\nReturning to main menu...")
@@ -349,8 +399,10 @@ def handle_create_file(session_manager: SessionManager, ui: UIHandler,
                        project_manager: ProjectManager, command: str):
     """Handle file creation request using NLP parsing"""
     
-    # Remove "create" prefix and clean up
-    request = command.replace("create", "").strip()
+    # Remove "create" prefix if present (may have been routed here via NLP detection)
+    request = command
+    if request.lower().startswith("create"):
+        request = request[6:].strip()  # Remove "create " prefix
     
     ui.info("Understanding your request...")
     
@@ -440,15 +492,38 @@ def handle_edit_file(session_manager: SessionManager, ui: UIHandler,
         ui.info("What changes do you want to make? (Enter for multiple lines, Escape+Enter to finish):")
         # Use multi-line prompt session for complex descriptions
         change_desc = ui.prompt_session.prompt("changes> ").strip()
-        if not change_desc:
+    if not change_desc:
             return
     
     ui.info(f"Editing: {filepath}")
     ui.info(f"Request: {change_desc}")
-    ui.info("Please wait... calling Boudica for code modifications...")
     
-    # Ask Boudica to modify code
-    new_code = boudica.edit_code(current_code, change_desc, filepath, session, project_manager)
+    # Check if request is already detailed (contains code snippets or is long)
+    # Skip clarification if so - it's detailed enough
+    is_detailed = (len(change_desc) > 50 or 
+                   '<<' in change_desc or '>>' in change_desc or 
+                   '::' in change_desc or '"' in change_desc)
+    
+    if is_detailed:
+        ui.info("Request is detailed - proceeding with editing...")
+        clarified_desc = change_desc
+    else:
+        ui.info("Please wait... clarifying request with NLP...")
+        # Clarify request using Boudica's NLP to improve specificity
+        clarified_desc = boudica.clarify_request(change_desc, session)
+        if clarified_desc != change_desc:
+            ui.info(f"Clarified: {clarified_desc}")
+    
+    # Validate that request doesn't contain embedded code snippets
+    is_valid, error_msg = boudica.validate_edit_request(clarified_desc)
+    if not is_valid:
+        ui.error(error_msg)
+        return
+    
+    ui.info("Calling Boudica for code modifications...")
+    
+    # Ask Boudica to modify code with clarified request
+    new_code = boudica.edit_code(current_code, clarified_desc, filepath, session, project_manager)
     if not new_code:
         ui.error(f"Failed to generate edit: {boudica.last_error}")
         return
@@ -485,10 +560,33 @@ def handle_edit_file_by_name(session_manager: SessionManager, ui: UIHandler,
     
     ui.info(f"Editing: {filepath}")
     ui.info(f"Request: {change_request}")
-    ui.info("Please wait... calling Boudica for code modifications...")
     
-    # Ask Boudica to modify code with full file context
-    new_code = boudica.edit_code(current_code, change_request, filepath, session, project_manager)
+    # Check if request is already detailed (contains code snippets or is long)
+    # Skip clarification if so - it's detailed enough
+    is_detailed = (len(change_request) > 50 or 
+                   '<<' in change_request or '>>' in change_request or 
+                   '::' in change_request or '"' in change_request)
+    
+    if is_detailed:
+        ui.info("Request is detailed - proceeding with editing...")
+        clarified_request = change_request
+    else:
+        ui.info("Please wait... clarifying request with NLP...")
+        # Clarify request using Boudica's NLP to improve specificity
+        clarified_request = boudica.clarify_request(change_request, session)
+        if clarified_request != change_request:
+            ui.info(f"Clarified: {clarified_request}")
+    
+    # Validate that request doesn't contain embedded code snippets
+    is_valid, error_msg = boudica.validate_edit_request(clarified_request)
+    if not is_valid:
+        ui.error(error_msg)
+        return
+    
+    ui.info("Calling Boudica for code modifications...")
+    
+    # Ask Boudica to modify code with clarified request
+    new_code = boudica.edit_code(current_code, clarified_request, filepath, session, project_manager)
     if not new_code:
         ui.error(f"Failed to generate edit: {boudica.last_error}")
         return
@@ -528,56 +626,80 @@ def handle_build(project_manager: ProjectManager, ui: UIHandler,
         ui.show_build_errors(result['errors'])
         
         if ui.confirm("Attempt automatic fix?"):
-            ui.info("Attempting automatic fix...")
+            ui.info("Analyzing build errors...")
             
-            # Extract first file from error (usually in format: /path/to/file.cpp:line: error)
-            error_line = result['errors'][0] if result['errors'] else ""
-            file_match = re.match(r'([^:]+):', error_line)
+            # Import here to avoid circular imports
+            from boudica_integration import BoudicaCodegen
+            boudica = BoudicaCodegen()
             
-            if file_match:
-                error_file = file_match.group(1)
+            # Get full error output
+            error_summary = '\n'.join(result['errors'][:5])  # First 5 errors for context
+            
+            # Check for linker errors first (they require library installation)
+            linker_error_msg = boudica._handle_linker_error(error_summary, session, project_manager)
+            
+            if linker_error_msg:
+                # This is a linker error - show installation instructions
+                ui.info("")
+                ui.show_ai_response(linker_error_msg)
+                ui.info("")
                 
-                # Check if file exists
-                if Path(error_file).exists():
-                    try:
-                        current_code = Path(error_file).read_text()
-                        error_summary = ' '.join(result['errors'][:2])  # First 2 errors for context
-                        
-                        # Try to fix using Boudica
-                        from boudica_integration import BoudicaCodegen
-                        boudica = BoudicaCodegen()
-                        fixed_code = boudica.fix_build_error(
-                            error_summary,
-                            error_file,
-                            current_code,
-                            session,
-                            project_manager
-                        )
-                        
-                        if fixed_code:
-                            # Show diff
-                            ui.show_diff(current_code, fixed_code, error_file)
-                            
-                            if ui.confirm("Apply fix?"):
-                                # Apply the fix
-                                project_manager.backup_and_edit(error_file, fixed_code)
-                                ui.success("Fix applied. Rebuilding...")
-                                
-                                # Retry build
-                                result = project_manager.build()
-                                if result['success']:
-                                    ui.success("Build successful after fix!")
-                                    session_manager.add_history(session['name'], "build fixed and succeeded")
-                                else:
-                                    ui.error("Build still failing after fix")
-                        else:
-                            ui.error(f"Could not generate fix: {boudica.last_error if hasattr(boudica, 'last_error') else 'Unknown error'}")
-                    except Exception as e:
-                        ui.error(f"Error attempting fix: {str(e)}")
-                else:
-                    ui.error(f"Could not find file: {error_file}")
+                # Rebuild after user installs library
+                if ui.confirm("Rebuild after installing the library?"):
+                    ui.info("Rebuilding...")
+                    result = project_manager.build()
+                    if result['success']:
+                        ui.success("Build successful!")
+                        session_manager.add_history(session['name'], "build succeeded after installing library")
+                    else:
+                        ui.error("Build still failing. Check installation and try again.")
             else:
-                ui.error("Could not extract file path from error message")
+                # Try to fix code-level errors
+                # Extract first file from error (usually in format: /path/to/file.cpp:line: error)
+                error_line = result['errors'][0] if result['errors'] else ""
+                file_match = re.match(r'([^:]+):', error_line)
+                
+                if file_match:
+                    error_file = file_match.group(1)
+                    
+                    # Check if file exists
+                    if Path(error_file).exists():
+                        try:
+                            current_code = Path(error_file).read_text()
+                            
+                            # Try to fix using Boudica
+                            fixed_code = boudica.fix_build_error(
+                                error_summary,
+                                error_file,
+                                current_code,
+                                session,
+                                project_manager
+                            )
+                            
+                            if fixed_code:
+                                # Show diff
+                                ui.show_diff(current_code, fixed_code, error_file)
+                                
+                                if ui.confirm("Apply fix?"):
+                                    # Apply the fix
+                                    project_manager.backup_and_edit(error_file, fixed_code)
+                                    ui.success("Fix applied. Rebuilding...")
+                                    
+                                    # Retry build
+                                    result = project_manager.build()
+                                    if result['success']:
+                                        ui.success("Build successful after fix!")
+                                        session_manager.add_history(session['name'], "build fixed and succeeded")
+                                    else:
+                                        ui.error("Build still failing after fix")
+                            else:
+                                ui.error(f"Could not generate fix: {boudica.last_error if hasattr(boudica, 'last_error') else 'Unknown error'}")
+                        except Exception as e:
+                            ui.error(f"Error attempting fix: {str(e)}")
+                    else:
+                        ui.error(f"Could not find file: {error_file}")
+                else:
+                    ui.error("Could not extract file path from error message")
 
 
 def handle_workflows(project_manager: ProjectManager, ui: UIHandler):

@@ -18,17 +18,17 @@ def _enable_readline():
         # Configure readline for better editing
         readline.parse_and_bind('tab: complete')
         return True
-    except ImportError:
-        try:
-            # Try Windows version
-            import pyreadline as readline
-            return True
-        except ImportError:
-            # Fallback for systems without readline
-            return False
+    except Exception:
+        # Silently fail - prompt_toolkit provides cross-platform line editing
+        return False
 
-# Call this at module import time
-_enable_readline()
+# Call this at module import time, but catch any errors
+try:
+    _enable_readline()
+except Exception:
+    # If readline setup fails completely, continue anyway
+    # prompt_toolkit will handle input anyway
+    pass
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -276,6 +276,14 @@ class UIHandler:
         old_lines = old_code.split('\n')
         new_lines = new_code.split('\n')
         
+        # Validate inputs
+        if not new_code or new_code == old_code:
+            print("⚠️  No changes detected between old and new code")
+            print(f"   Old: {len(old_code)} chars, {len(old_lines)} lines")
+            print(f"   New: {len(new_code)} chars, {len(new_lines)} lines")
+            print()
+            return
+        
         # Validate: check if a large amount of code is being deleted
         deleted_lines = len([l for l in old_lines if l.strip()])
         added_lines = len([l for l in new_lines if l.strip()])
@@ -285,17 +293,25 @@ class UIHandler:
             print(f"   Original: {deleted_lines} lines → Modified: {added_lines} lines")
             print("   This may indicate Boudica returned an incomplete response.\n")
         
-        diff = difflib.unified_diff(
+        diff = list(difflib.unified_diff(
             old_lines, new_lines,
             fromfile=f'{filepath} (current)',
             tofile=f'{filepath} (proposed)',
             lineterm=''
-        )
+        ))
         
-        # Show first 50 lines of diff
+        if not diff:
+            print("⚠️  No differences found in unified diff (files may be identical)")
+            print(f"   Showing character differences:")
+            print(f"   Old: {len(old_code)} chars")
+            print(f"   New: {len(new_code)} chars")
+            print()
+            return
+        
+        # Show first 100 lines of diff
         for i, line in enumerate(diff):
-            if i >= 50:
-                remaining = sum(1 for _ in diff)
+            if i >= 100:
+                remaining = len(diff) - i
                 if remaining:
                     print(f"\n... ({remaining} more lines)")
                 break
