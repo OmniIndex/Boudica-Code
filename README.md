@@ -2,52 +2,321 @@
 
 **AI-Powered Code Generation & Project Management CLI**
 
-BoudicaCode is an intelligent command-line tool that uses AI to generate, build, debug, and manage multi-language software projects. It integrates with the Boudica inference server to provide context-aware code generation, automated error fixing, and comprehensive debugging capabilities.
+BoudicaCode is an intelligent command-line tool that uses the **Boudica inference server** to generate, build, debug, and manage multi-language software projects. It combines natural language processing with automated compilation, interactive debugging, and Git integration to streamline the entire development workflow.
 
-## Features
+---
 
-### 🎯 Project Management
-- **Multi-Language Support**: Create projects in Python, Node.js, TypeScript, Java, C++, or Full-Stack combinations
-- **Automatic Scaffolding**: Generate proper project structure with language-specific configuration files
-- **Project Organization**: All projects stored in `~/boudica_code/projects/` for easy access
-- **File Browser**: List, view, and manage files within projects
-- **Session Persistence**: Track project sessions and history
+## 🎯 Key Features
+
+### Project Management
+- **Multi-Language Support**: Python, Node.js, TypeScript, Java, C++, Bash, Batch, and mixed-language projects
+- **Automatic Scaffolding**: Generates proper project structure with language-specific config files and templates
+- **Project Organization**: All projects stored in `~/boudica_code/projects/` with persistent session tracking
+- **File Management**: Browse, view, create, edit, and delete files within projects
+- **Session Persistence**: SQLite-backed conversation history and project metadata
 
 ### 🤖 AI-Powered Code Generation
-- **Natural Language Input**: Describe what you want, AI generates the code
-- **Intelligent Parsing**: Understands file paths, descriptions, and requirements from natural language
-- **Context-Aware**: Generates language-appropriate code for each project type
-- **Multi-File Generation**: Create new files on demand with AI assistance
+- **Natural Language File Creation**: Describe what you want in plain English; Boudica generates the code
+- **Intelligent Path/Description Parsing**: Extracts file paths and requirements from unstructured natural language input
+- **Language-Appropriate Code**: Automatically adapts generated code to the project's language stack
+- **Code Validation**: Extracts code from HTML, Markdown, and plain text response formats
+- **Error Recovery**: Re-requests code with corrections if response format is unexpected
 
 ### 🛠️ Smart Build System
-- **Multi-Language Builds**:
-  - **C++**: CMake-based compilation with debug symbols enabled
-  - **Python**: Module compilation and syntax checking
-  - **Node.js**: NPM build automation
-  - **TypeScript**: TypeScript compilation with source mapping
-  - **Java**: Maven-based builds
-- **Error Detection**: Automatic compilation error extraction and formatting
-- **Auto-Fix with AI**: When builds fail, AI automatically suggests and applies fixes
-- **Diff Preview**: Review changes before applying auto-fixes
+- **Multi-Language Compilation**:
+  - **C++**: CMake-based builds with debug symbols (`-g -O0`)
+  - **Python**: Module compilation and syntax validation (`python3 -m py_compile`)
+  - **Node.js/TypeScript**: NPM build pipelines (`npm install`, `npm run build`)
+  - **Java**: Maven-based compilation (`mvn clean compile`)
+  - **Bash**: Syntax validation (`bash -n`)
+- **Automatic Error Parsing**: Extracts compiler errors with file:line:column precision
+- **AI-Powered Auto-Fix**: When builds fail, sends errors to Boudica for intelligent fixes with diffs
+- **Diff Review**: Shows unified diffs of all changes before applying auto-fixes
+- **Iterative Fixes**: Retries compilation after fixes until success or max retries reached
 
 ### 🐛 Advanced Debugging
-- **Multi-Language Debugger**: Support for C++, Python, JavaScript, and Java
-- **Interactive Breakpoints**: Set breakpoints at specific lines
-- **Stack Traces**: View full call stacks and local variables
-- **Crash Analysis**: AI-powered crash analysis with root cause identification
-- **Debug Symbols**: Binaries compiled with debug symbols for effective debugging
+- **Multi-Language Debugger Support**: GDB (C++), pdb (Python), Node Inspector (JavaScript), jdb (Java)
+- **Interactive Breakpoints**: Set breakpoints at specific file:line locations
+- **Crash Analysis**: Captures crash output with stack traces for AI analysis
+- **Root Cause Identification**: Boudica analyzes crashes and suggests fixes
+- **Debug Symbols**: Binaries compiled with full debug info for effective debugging
+- **Automatic Crash Detection**: Captures stderr/stdout for crash diagnostics
 
 ### ✏️ Intelligent Code Editing
-- **Natural Language Edits**: Edit files using natural language commands
-- **Context Preservation**: Shows line numbers to ensure edits don't lose content
-- **Content Validation**: Verifies edited files maintain >70% of original content
-- **Diff Review**: Preview changes before committing edits
+- **Natural Language Edits**: Modify files using English commands like "add error handling" or "optimize the loop"
+- **Context-Aware Editing**: Preserves file context with line numbers to prevent content loss
+- **Content Validation**: Ensures edited files maintain >70% of original content
+- **Diff Preview**: Review all changes via unified diffs before committing
+- **Smart Pattern Extraction**: Uses regex to identify target code sections in natural language requests
 
 ### 🔄 Git Integration
 - **Automatic Repository Initialization**: Every project is initialized as a Git repository
-- **Automatic Commits**: First commit created during project scaffolding
-- **Language-Specific .gitignore**: Automatically generated for each language
-- **Config Persistence**: Git credentials stored in `~/boudica_code/git_config.json`
+- **Initial Commit**: First commit created during project scaffolding with generated files
+- **Language-Specific .gitignore**: Auto-generated for each language using GitHub templates
+- **Git Credential Management**: Stored in `~/boudica_code/git_config.json` with restricted permissions
+- **User Configuration**: Checks and prompts for git user.name/user.email if not configured
+- **Git Installation Verification**: Validates git is available before proceeding
+
+### ⚙️ CI/CD & Workflow Automation
+- **GitHub Actions Workflow Generation**: Automatically creates `.github/workflows/ci.yml` for your project
+- **Language-Specific Pipelines**: Pre-configured build, test, and deployment steps per language
+- **Matrix Testing**: Supports multiple Python/Node/Java versions in parallel
+- **Cross-Platform Builds**: Windows, macOS, and Linux runners configured appropriately
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+1. **Install Dependencies**
+   ```bash
+   # On Linux/macOS
+   brew install git python3 cmake nodejs openjdk
+   
+   # On Windows
+   choco install git python cmake nodejs openjdk
+   ```
+
+2. **Set Up Boudica API Key**
+   ```bash
+   # Get your API key from: https://boudi.ca/api_keys/
+   
+   # Linux/macOS
+   export BOUDICA_API_KEY='your_key_here'
+   export BOUDICA_USER_ID='your_username'  # Optional
+   
+   # Windows PowerShell
+   $env:BOUDICA_API_KEY='your_key_here'
+   $env:BOUDICA_USER_ID='your_username'
+   ```
+
+3. **Run BoudicaCode**
+   ```bash
+   cd BoudicaCode
+   python3 src/main.py
+   ```
+
+### Basic Workflow
+
+1. **Create a New Project**
+   - Select "New" from main menu
+   - Choose a name and technology stack
+   - BoudicaCode scaffolds the entire project structure
+
+2. **Generate Code**
+   ```
+   create src/main.py: a simple CLI calculator with add, subtract, multiply, divide
+   create src/utils.py: utility functions for input validation
+   ```
+
+3. **Edit Files**
+   ```
+   edit src/main.py: add error handling for division by zero
+   modify utils.py: add support for floating-point numbers
+   ```
+
+4. **Build & Fix Errors**
+   ```
+   build
+   ```
+   If errors occur, BoudicaCode automatically:
+   - Detects compilation errors
+   - Sends errors to Boudica for analysis
+   - Proposes and applies fixes
+   - Rebuilds automatically
+
+5. **Debug Issues**
+   ```
+   debug
+   ```
+   - Set breakpoints interactively
+   - Run with debugger
+   - Analyze crashes automatically
+
+---
+
+## 📁 Project Structure
+
+```
+BoudicaCode/
+├── src/
+│   ├── main.py                 # CLI entry point
+│   ├── session_manager.py      # SQLite session management
+│   ├── project_manager.py      # Project structure & file ops
+│   ├── boudica_integration.py  # Boudica API client
+│   ├── ui_handler.py           # Terminal UI & prompts
+│   ├── git_integration.py      # Git operations
+│   ├── workflow_generator.py   # GitHub Actions generation
+│   └── debugger.py             # Multi-language debugging
+├── assets/                     # Workflow templates, gitignore templates
+├── requirements.txt            # Python dependencies
+├── run.sh                       # Launch script (Linux/macOS)
+├── run.bat                      # Launch script (Windows)
+└── README.md                    # This file
+```
+
+---
+
+## 📊 Supported Project Types
+
+| Language | Build System | Test Framework | Debug Tool | Status |
+|----------|-------------|----------------|-----------|--------|
+| Python | Python native | pytest | pdb | ✅ Full |
+| Node.js | npm | npm test | Node Inspector | ✅ Full |
+| TypeScript | tsc | npm test | Node Inspector | ✅ Full |
+| C++ | CMake | gtest | GDB | ✅ Full |
+| Java | Maven | Maven Surefire | jdb | ✅ Full |
+| Bash | - | bats | bash -x | ✅ Syntax only |
+| Windows Batch | - | - | cmd | ⚠️ Limited |
+
+---
+
+## 🔧 Advanced Usage
+
+### Session History
+All projects and conversations are logged to:
+- **Sessions DB**: `~/boudica_code/sessions.db`
+- **Project Files**: `~/boudica_code/projects/{project_name}/`
+- **File Backups**: `~/boudica_code/projects/{project_name}/.backups/`
+
+### File Operations
+```
+ls, list, files, browse    # Browse project files
+view <path>                # View file contents with syntax highlighting
+edit <path>: <description> # Edit with natural language
+delete, rm <path>          # Delete file (with backup)
+create <path>: <description> # Create new file
+```
+
+### Code Generation
+```
+create src/api.py: REST API with Flask and SQLAlchemy
+create tests/test_api.py: unit tests for all endpoints
+```
+
+### Building & Debugging
+```
+build                      # Compile/validate project
+debug                      # Launch debugger session
+workflows                  # Generate GitHub Actions CI/CD
+status                     # Show project info
+help                       # Show command help
+```
+
+### Planning & Discussion
+Type natural language requests that don't match file operations, and Boudica will engage in planning discussions to help design your application.
+
+---
+
+## 🔐 Authentication & Configuration
+
+### Environment Variables
+- `BOUDICA_API_KEY` (required): Your API key from https://boudi.ca/api_keys/
+- `BOUDICA_URL` (optional): Inference server URL (default: `https://boudi.ca/api/boudica`)
+- `BOUDICA_USER_ID` (optional): Your username for audit logging (default: `boudica-code-agent`)
+
+### Git Configuration
+Git user.name and user.email are verified at startup. If not set, BoudicaCode prompts you to configure them.
+
+### File Backup Strategy
+Every file edit creates a timestamped backup in `.backups/` before modification. This allows recovery if edits go wrong.
+
+---
+
+## 🐛 Troubleshooting
+
+### "BOUDICA_API_KEY not set!"
+Set your API key as an environment variable (see Authentication section above).
+
+### Build fails with "Command not found"
+Ensure the required compiler/runtime is installed for your project language:
+- C++: `cmake` and `g++`/`clang`
+- Python: `python3`
+- Node.js: `npm`
+- Java: `mvn`
+
+### Debugger not finding breakpoints
+Make sure the file path is relative to the project directory and the file exists.
+
+### Git configuration error
+Run: `git config --global user.name "Your Name"` and `git config --global user.email "your@email.com"`
+
+---
+
+## 📝 Examples
+
+### Python Project
+```
+Create project: my_calculator
+Language: python
+
+create src/calculator.py: a class-based calculator
+create src/ui.py: CLI interface with argparse
+edit src/calculator.py: add support for exponentiation
+build
+debug
+```
+
+### C++ Project
+```
+Create project: matrix_lib
+Language: cpp
+
+create src/matrix.h: matrix class with basic operations
+create src/matrix.cpp: implementation
+create tests/test_matrix.cpp: unit tests
+build
+debug
+```
+
+---
+
+## 📚 Architecture
+
+### Session Management
+- **SQLite Database** (`sessions.db`): Stores project metadata and conversation history
+- **Tables**: `sessions`, `conversation_history`, `file_backups`
+- **Enables**: Project recovery, conversation recall, change tracking
+
+### Project Scaffolding
+- **Auto-Generated Files**: `CMakeLists.txt`, `package.json`, `pom.xml`, `.gitignore`, `requirements.txt`, etc.
+- **Directory Structure**: Language-appropriate folders (`src/`, `tests/`, `public/`, etc.)
+- **Git Initialization**: `.git/` repo created with initial commit
+
+### AI Integration
+- **Natural Language → Code**: Uses Boudica for intelligent code generation
+- **Error Analysis**: Sends compilation errors to Boudica for automated fixes
+- **Crash Debugging**: Analyzes crash output with AI for root cause identification
+- **Context Preservation**: Includes relevant code context in all AI requests
+
+---
+
+## 🛠️ Development
+
+### Running Locally
+```bash
+cd BoudicaCode
+python3 -m py_compile src/*.py  # Syntax validation
+python3 src/main.py             # Run CLI
+```
+
+### Code Structure
+- **Modular Design**: Each component (sessions, projects, git, UI, debug) is independent
+- **Type Hints**: Full type annotations for IDE support
+- **Error Handling**: Comprehensive exception handling with user-friendly messages
+
+---
+
+## 📄 License
+
+See LICENSE file in project root.
+
+---
+
+## 🤝 Contributing
+
+BoudicaCode is an internal demo project. For issues or contributions, contact the Boudica team.
 - **Environment Variables**: Support for GIT_USER, GIT_EMAIL, GIT_SERVER, GIT_TOKEN
 
 ### 🚀 GitHub Actions CI/CD
