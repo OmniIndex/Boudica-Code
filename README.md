@@ -186,6 +186,8 @@ ls, list, files, browse    # Browse project files
 view <path>                # View file contents with syntax highlighting
 edit <path>: <description> # Edit with natural language
 delete, rm <path>          # Delete file (with backup)
+restore [path]             # Restore a file from backup history
+git settings               # Configure auto-commit and auto-push behavior
 create <path>: <description> # Create new file
 ```
 
@@ -218,6 +220,13 @@ Type natural language requests that don't match file operations, and Boudica wil
 
 ### Git Configuration
 Git user.name and user.email are verified at startup. If not set, BoudicaCode prompts you to configure them.
+
+### Git Automation Settings
+Use `git settings` inside a project session to configure:
+- `auto_commit` (default: false) - Automatically commits after create/edit/delete/restore operations
+- `auto_push` (default: false) - Attempts safe push after auto-commit
+
+Safe push is guarded and will skip gracefully when no remote/upstream is configured.
 
 ### File Backup Strategy
 Every file edit creates a timestamped backup in `.backups/` before modification. This allows recovery if edits go wrong.
