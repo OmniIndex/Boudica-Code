@@ -38,9 +38,25 @@ class GitIntegration:
             'email': os.environ.get('GIT_EMAIL'),
             'server': os.environ.get('GIT_SERVER', 'github'),
             'token': os.environ.get('GIT_TOKEN'),
+            'auto_commit': False,
+            'auto_push': False,
         }
         
         return config
+
+    def get_setting(self, key: str, default=None):
+        """Get a persisted git integration setting."""
+        return self.config.get(key, default)
+
+    def set_setting(self, key: str, value) -> bool:
+        """Set and persist a git integration setting."""
+        try:
+            self.config[key] = value
+            self._save_config()
+            return True
+        except Exception as e:
+            self.last_error = f"Failed to save setting '{key}': {e}"
+            return False
     
     def _save_config(self):
         """Save git config to file"""
@@ -168,6 +184,89 @@ class GitIntegration:
     def is_git_repo(self, project_dir: Path) -> bool:
         """Check if directory is a git repository"""
         return (project_dir / '.git').exists()
+
+    def is_working_tree_clean(self, project_dir: Path) -> bool:
+        """Check if repository has no unstaged/staged changes."""
+        return self.get_status(project_dir) == ""
+
+    def has_remote(self, project_dir: Path, remote_name: str = 'origin') -> bool:
+        """Check if a named remote exists."""
+        try:
+            subprocess.run(
+                ['git', 'remote', 'get-url', remote_name],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    def get_current_branch(self, project_dir: Path) -> Optional[str]:
+        """Get current branch name, or None for detached HEAD."""
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            branch = result.stdout.strip()
+            if branch == 'HEAD':
+                return None
+            return branch
+        except subprocess.CalledProcessError:
+            return None
+
+    def has_upstream(self, project_dir: Path) -> bool:
+        """Check if current branch has an upstream configured."""
+        try:
+            subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    def safe_push(self, project_dir: Path, remote_name: str = 'origin') -> Tuple[bool, str]:
+        """Push with safety checks for repo state, remote, branch, and cleanliness."""
+        if not self.is_git_repo(project_dir):
+            return False, "Not a git repository"
+
+        if not self.has_remote(project_dir, remote_name):
+            return False, f"Remote '{remote_name}' is not configured"
+
+        branch = self.get_current_branch(project_dir)
+        if not branch:
+            return False, "Detached HEAD - cannot determine branch to push"
+
+        if not self.is_working_tree_clean(project_dir):
+            return False, "Working tree is not clean; commit or stash changes before pushing"
+
+        try:
+            if self.has_upstream(project_dir):
+                cmd = ['git', 'push']
+            else:
+                cmd = ['git', 'push', '--set-upstream', remote_name, branch]
+
+            subprocess.run(
+                cmd,
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return True, f"Pushed branch '{branch}' to '{remote_name}'"
+        except subprocess.CalledProcessError as e:
+            error_text = e.stderr.strip() if e.stderr else str(e)
+            self.last_error = f"Failed to push: {error_text}"
+            return False, self.last_error
 
 
 def get_language_gitignore(language: str) -> str:

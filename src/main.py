@@ -50,6 +50,98 @@ def extract_filepath_from_command(command: str, project_manager: ProjectManager)
     return None
 
 
+def maybe_auto_commit_and_push(project_manager: ProjectManager, ui: UIHandler, action: str):
+    """Apply optional auto-commit and auto-push according to git settings."""
+    git = GitIntegration()
+
+    if not git.check_git_installed() or not git.is_git_repo(project_manager.project_dir):
+        return
+
+    auto_commit = bool(git.get_setting('auto_commit', False))
+    auto_push = bool(git.get_setting('auto_push', False))
+
+    if not auto_commit:
+        return
+
+    if git.get_status(project_manager.project_dir) == "":
+        return
+
+    if not git.add_all(project_manager.project_dir):
+        ui.error(f"Auto-commit skipped: {git.last_error}")
+        return
+
+    commit_message = f"Auto-commit: {action}"
+    if git.commit(project_manager.project_dir, commit_message):
+        ui.info(f"Git: committed changes ({commit_message})")
+    else:
+        ui.error(f"Auto-commit failed: {git.last_error}")
+        return
+
+    if auto_push:
+        pushed, msg = git.safe_push(project_manager.project_dir)
+        if pushed:
+            ui.success(f"Git: {msg}")
+        else:
+            # Soft failure: remote/upstream may not exist for local-only projects.
+            ui.info(f"Git push skipped: {msg}")
+
+
+def handle_git_settings(ui: UIHandler, command: str):
+    """Configure git automation settings (auto-commit and auto-push)."""
+    git = GitIntegration()
+
+    if not git.check_git_installed():
+        ui.error("Git is not installed")
+        return
+
+    auto_commit = bool(git.get_setting('auto_commit', False))
+    auto_push = bool(git.get_setting('auto_push', False))
+
+    # Optional direct command mode:
+    #   git settings auto-commit on|off
+    #   git settings auto-push on|off
+    parts = command.strip().lower().split()
+    if len(parts) >= 4 and parts[0] == 'git' and parts[1] == 'settings':
+        setting = parts[2]
+        value_token = parts[3]
+        desired = value_token in ('on', 'true', '1', 'yes')
+
+        if setting == 'auto-commit':
+            if git.set_setting('auto_commit', desired):
+                ui.success(f"Git setting updated: auto_commit={desired}")
+            else:
+                ui.error(git.last_error or "Failed to update auto_commit")
+            return
+        if setting == 'auto-push':
+            if desired and not auto_commit:
+                ui.error("Enable auto-commit first before enabling auto-push")
+                return
+            if git.set_setting('auto_push', desired):
+                ui.success(f"Git setting updated: auto_push={desired}")
+            else:
+                ui.error(git.last_error or "Failed to update auto_push")
+            return
+
+    ui.info(f"Current git automation settings: auto_commit={auto_commit}, auto_push={auto_push}")
+
+    commit_choice = ui.confirm("Enable auto-commit after file changes?")
+    auto_commit = bool(commit_choice)
+
+    if auto_commit:
+        push_choice = ui.confirm("Enable auto-push after auto-commit? (requires remote/upstream)")
+        auto_push = bool(push_choice)
+    else:
+        auto_push = False
+
+    ok_commit = git.set_setting('auto_commit', auto_commit)
+    ok_push = git.set_setting('auto_push', auto_push)
+
+    if ok_commit and ok_push:
+        ui.success(f"Saved git automation settings: auto_commit={auto_commit}, auto_push={auto_push}")
+    else:
+        ui.error(git.last_error or "Failed to save git automation settings")
+
+
 def main():
     """Main CLI entry point"""
     
@@ -219,6 +311,11 @@ def interactive_session(session_manager: SessionManager, ui: UIHandler,
             elif command.lower().startswith("delete") or command.lower().startswith("rm"):
                 handle_delete_file(project_manager, ui, session_manager, session, command)
                 current_file = None  # Clear file context after delete
+            elif command.lower().startswith("restore"):
+                handle_restore_file(project_manager, ui, session_manager, session, command)
+                current_file = None
+            elif command.lower().startswith("git settings"):
+                handle_git_settings(ui, command)
             elif command.lower().startswith("create"):
                 handle_create_file(session_manager, ui, boudica, session, project_manager, command)
             elif command.lower().startswith("edit"):
@@ -384,8 +481,67 @@ def handle_delete_file(project_manager: ProjectManager, ui: UIHandler,
         full_path.unlink()  # Delete the file
         ui.success(f"Deleted: {filepath}")
         session_manager.add_history(session['name'], f"delete {filepath}")
+        maybe_auto_commit_and_push(project_manager, ui, f"delete {filepath}")
     except Exception as e:
         ui.error(f"Failed to delete file: {e}")
+
+
+def handle_restore_file(project_manager: ProjectManager, ui: UIHandler,
+                       session_manager: SessionManager, session: dict, command: str):
+    """Restore a previously created backup"""
+    restore_arg = command.replace("restore", "", 1).strip()
+    filter_name = Path(restore_arg).name if restore_arg else None
+
+    backups = project_manager.get_backups(filter_name)
+    if not backups:
+        ui.info("No backups found.")
+        return
+
+    ui.info("\nAvailable backups:")
+    ui.info("=" * 80)
+    for i, backup in enumerate(backups, 1):
+        size_str = f"{backup['size']} B" if backup['size'] < 1024 else f"{backup['size'] / 1024:.1f} KB"
+        print(f"  [{i:2d}] {backup['name']:<45} {size_str:>8}  {backup['mtime']}")
+    ui.info("=" * 80)
+
+    selection = ui.prompt_text("Select backup number to restore")
+    if not selection or not selection.isdigit():
+        ui.info("Cancelled.")
+        return
+
+    index = int(selection) - 1
+    if index < 0 or index >= len(backups):
+        ui.error("Invalid backup number")
+        return
+
+    selected_backup = backups[index]
+
+    target_filepath = restore_arg if restore_arg else project_manager.guess_restore_target(selected_backup['name'])
+    if target_filepath:
+        ui.info(f"Suggested restore target: {target_filepath}")
+        if not ui.confirm("Use this target path?"):
+            target_filepath = ui.prompt_text("Enter target file path to restore into")
+    else:
+        target_filepath = ui.prompt_text("Enter target file path to restore into")
+
+    if not target_filepath:
+        ui.info("Cancelled.")
+        return
+
+    ui.info(f"Backup: {selected_backup['name']}")
+    ui.info(f"Target: {target_filepath}")
+
+    if not ui.confirm("Restore this backup?"):
+        ui.info("Cancelled.")
+        return
+
+    success, result = project_manager.restore_backup(selected_backup['path'], target_filepath)
+    if success:
+        ui.success(f"Restored backup to: {result}")
+        session_manager.add_history(session['name'], f"restore {selected_backup['name']} -> {target_filepath}")
+        maybe_auto_commit_and_push(project_manager, ui, f"restore {target_filepath}")
+    else:
+        ui.error(f"Failed to restore backup: {result}")
 
 
 def handle_status(project_manager: ProjectManager, ui: UIHandler):
@@ -456,6 +612,7 @@ def handle_create_file(session_manager: SessionManager, ui: UIHandler,
         project_manager.update_cmake_for_file(filepath)
         session_manager.add_history(session['name'], f"create {filepath}")
         ui.success(f"Created: {filepath}")
+        maybe_auto_commit_and_push(project_manager, ui, f"create {filepath}")
         
         # Ask user if they want to edit the file
         full_path = project_manager.project_dir / filepath
@@ -537,6 +694,7 @@ def handle_edit_file(session_manager: SessionManager, ui: UIHandler,
             session_manager.add_history(session['name'], f"edit {filepath}")
             ui.success(f"Updated: {filepath}")
             ui.info(f"Backup saved: {backup_path}")
+            maybe_auto_commit_and_push(project_manager, ui, f"edit {filepath}")
             
             # Ask user if they want to edit the file further
             full_path = project_manager.project_dir / filepath
@@ -600,6 +758,7 @@ def handle_edit_file_by_name(session_manager: SessionManager, ui: UIHandler,
             session_manager.add_history(session['name'], f"edit {filepath}")
             ui.success(f"Updated: {filepath}")
             ui.info(f"Backup saved: {backup_path}")
+            maybe_auto_commit_and_push(project_manager, ui, f"edit {filepath}")
             
             # Ask user if they want to edit the file further
             full_path = project_manager.project_dir / filepath
@@ -684,6 +843,7 @@ def handle_build(project_manager: ProjectManager, ui: UIHandler,
                                     # Apply the fix
                                     project_manager.backup_and_edit(error_file, fixed_code)
                                     ui.success("Fix applied. Rebuilding...")
+                                    maybe_auto_commit_and_push(project_manager, ui, f"build fix {error_file}")
                                     
                                     # Retry build
                                     result = project_manager.build()

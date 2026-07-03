@@ -6,6 +6,7 @@ import os
 import json
 import shutil
 import subprocess
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -462,7 +463,7 @@ class ProjectManager:
         except Exception as e:
             return False, str(e)
     
-    def get_backups(self, filepath: str = None) -> List[Dict]:
+    def get_backups(self, filepath: Optional[str] = None) -> List[Dict]:
         """List backups for a file or all files"""
         backups_dir = self.project_dir / ".backups"
         
@@ -481,6 +482,58 @@ class ProjectManager:
                     })
         
         return backups
+
+    def _extract_original_name_from_backup(self, backup_name: str) -> Optional[str]:
+        """Extract original filename from backup name format: YYYYMMDD_HHMMSS_filename"""
+        match = re.match(r'^\d{8}_\d{6}_(.+)$', backup_name)
+        if not match:
+            return None
+        return match.group(1)
+
+    def guess_restore_target(self, backup_name: str) -> Optional[str]:
+        """Guess the target file path for a backup based on filename match in project"""
+        original_name = self._extract_original_name_from_backup(backup_name)
+        if not original_name:
+            return None
+
+        matches = []
+        for path in self.project_dir.rglob(original_name):
+            if not path.is_file():
+                continue
+            if ".backups" in path.parts:
+                continue
+            if ".git" in path.parts:
+                continue
+            matches.append(path)
+
+        if len(matches) == 1:
+            return str(matches[0].relative_to(self.project_dir))
+
+        return None
+
+    def restore_backup(self, backup_path: str, target_filepath: str) -> Tuple[bool, str]:
+        """Restore a backup file into a target file path"""
+        backup_file = Path(backup_path)
+        if not backup_file.exists() or not backup_file.is_file():
+            return False, "Backup file not found"
+
+        target_path = self.project_dir / target_filepath
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Keep a safety copy of current target before overwrite.
+            if target_path.exists():
+                backups_dir = self.project_dir / ".backups"
+                backups_dir.mkdir(exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                pre_restore_name = f"{timestamp}_pre_restore_{target_path.name}"
+                pre_restore_path = backups_dir / pre_restore_name
+                shutil.copy2(target_path, pre_restore_path)
+
+            shutil.copy2(backup_file, target_path)
+            return True, str(target_path)
+        except Exception as e:
+            return False, str(e)
     
     def build(self) -> Dict:
         """Build/compile the project"""
