@@ -5,6 +5,7 @@ UI Handler - User interface and interactive prompts for CLI
 from typing import Optional, List, Dict
 import difflib
 from pathlib import Path
+from datetime import datetime, timedelta
 import sys
 import os
 
@@ -65,11 +66,12 @@ class UIHandler:
         print("  [N]ew       - Create a new project")
         print("  [O]pen      - Open existing project")
         print("  [L]ist      - List all projects")
+        print("  [R]emove    - Remove a project from the list")
         print("  [E]xit      - Exit Boudica Code")
         print()
         
         while True:
-            choice = self.prompt_session.prompt("Choice (n/o/l/e): ").strip().lower()
+            choice = self.prompt_session.prompt("Choice (n/o/l/r/e): ").strip().lower()
             
             if choice in ['n', 'new']:
                 return 'new'
@@ -77,6 +79,8 @@ class UIHandler:
                 return 'open'
             elif choice in ['l', 'list']:
                 return 'list'
+            elif choice in ['r', 'remove']:
+                return 'remove'
             elif choice in ['e', 'exit']:
                 return 'exit'
             else:
@@ -390,12 +394,44 @@ class UIHandler:
         print("\n" + "=" * self.width)
         print("ALL PROJECTS")
         print("=" * self.width + "\n")
+
+        stale_cutoff = datetime.now() - timedelta(days=30)
+        stale_projects = []
+
+        def _parse_db_timestamp(value: str):
+            if not value:
+                return None
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                try:
+                    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    return None
         
         for session in sessions:
             created = session.get('created_at', 'Unknown')[:10]
-            print(f"  {session['name']:<25} {session['stack']:<15} (Created: {created})")
+            last_accessed_raw = session.get('last_accessed')
+            last_accessed_dt = _parse_db_timestamp(last_accessed_raw)
+            last_accessed = last_accessed_dt.strftime("%Y-%m-%d") if last_accessed_dt else "Unknown"
+
+            print(
+                f"  {session['name']:<25} {session['stack']:<15} "
+                f"(Created: {created}, Last Accessed: {last_accessed})"
+            )
+
+            if last_accessed_dt and last_accessed_dt < stale_cutoff:
+                stale_projects.append((session['name'], session['stack'], last_accessed))
         
         print(f"\nTotal: {len(sessions)} project(s)\n")
+
+        print("Projects not accessed in the last 30 days:")
+        if not stale_projects:
+            print("  None")
+        else:
+            for name, stack, last_accessed in stale_projects:
+                print(f"  - {name} ({stack}) last accessed {last_accessed}")
+        print()
     
     def info(self, message: str):
         """Display info message"""

@@ -10,6 +10,7 @@ import sys
 import os
 import subprocess
 import re
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -188,6 +189,8 @@ def main():
                 handle_open_project(session_manager, ui, boudica)
             elif choice == "list":
                 handle_list_sessions(session_manager, ui)
+            elif choice == "remove":
+                handle_remove_project(session_manager, ui)
             elif choice == "exit":
                 ui.show_goodbye()
                 sys.exit(0)
@@ -273,6 +276,53 @@ def handle_list_sessions(session_manager: SessionManager, ui: UIHandler):
         return
     
     ui.show_sessions_list(sessions)
+
+
+def handle_remove_project(session_manager: SessionManager, ui: UIHandler):
+    """Remove a project from the session list, optionally deleting local files."""
+    sessions = session_manager.list_sessions()
+    if not sessions:
+        ui.info("No projects found")
+        return
+
+    project_name = ui.prompt_session_selection(sessions)
+    if not project_name:
+        return
+
+    session = session_manager.get_session(project_name)
+    if not session:
+        ui.error(f"Project '{project_name}' not found")
+        return
+
+    project_path = Path(session['project_path'])
+    ui.info(f"Selected project: {project_name}")
+    ui.info(f"Path: {project_path}")
+
+    if not ui.confirm("Remove this project from the project list?"):
+        ui.info("Cancelled.")
+        return
+
+    delete_files = False
+    if project_path.exists():
+        delete_files = ui.confirm("Also delete this project's files from disk?")
+
+    removed = session_manager.delete_session(project_name)
+    if not removed:
+        ui.error(f"Failed to remove project '{project_name}' from the list")
+        return
+
+    if delete_files:
+        confirm_text = ui.prompt_text("Type DELETE to permanently remove project files")
+        if confirm_text == "DELETE":
+            try:
+                shutil.rmtree(project_path)
+                ui.success(f"Removed project '{project_name}' and deleted project files")
+            except Exception as e:
+                ui.error(f"Removed from list, but failed to delete files: {e}")
+        else:
+            ui.info("Removed from list; files were kept because confirmation text did not match")
+    else:
+        ui.success(f"Removed project '{project_name}' from the project list")
 
 
 def interactive_session(session_manager: SessionManager, ui: UIHandler, 
