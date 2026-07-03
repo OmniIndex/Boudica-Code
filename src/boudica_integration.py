@@ -33,7 +33,7 @@ class BoudicaCodegen:
             print("❌ BOUDICA_API_KEY not set!")
             print("="*80)
             print("\nBoudicaCode requires authentication to access the Boudica inference server.")
-            print("\n1. Go to: https://boudi.ca/api_key")
+            print("\n1. Go to: https://boudi.ca/api_keys/")
             print("2. Log in with your credentials")
             print("3. Copy your API key")
             print("\n4. Set the environment variable:")
