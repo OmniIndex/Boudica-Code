@@ -395,6 +395,7 @@ Main Menu:
   [N]ew       - Create a new project
   [O]pen      - Open existing project
   [L]ist      - List all projects
+   [R]emove    - Remove a project from the list
   [E]xit      - Exit Boudica Code
 ```
 
