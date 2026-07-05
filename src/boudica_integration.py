@@ -613,11 +613,13 @@ Format: --- filepath +++ filepath @@ -start,count +start,count @@ -old +new"""
             return None
     
     def _apply_unified_diff(self, original_code: str, diff_text: str) -> Optional[str]:
-        """Apply a unified diff to code and return modified version.
+        """Apply a diff to code and return modified version.
+        
+        Supports both unified diff format and normal diff format.
         
         Args:
             original_code: Original file content
-            diff_text: Unified diff format
+            diff_text: Diff in unified or normal format
             
         Returns:
             Modified code or None if diff is invalid
@@ -626,24 +628,29 @@ Format: --- filepath +++ filepath @@ -start,count +start,count @@ -old +new"""
             original_lines = original_code.split('\n')
             diff_lines = diff_text.strip().split('\n')
             
+            # Detect diff format
+            has_at_markers = any(line.startswith('@@') for line in diff_lines)
+            has_normal_markers = any(line.startswith(('<', '>', '---')) for line in diff_lines)
             
-            # Find the actual diff content (skip any preamble)
-            diff_start = 0
-            found_at_symbol = False
-            for i, line in enumerate(diff_lines):
-                if line.startswith('@@'):
-                    diff_start = i
-                    found_at_symbol = True
-                    break
-            
-            if not found_at_symbol:
-                # No @@ found - check if diff is in a different format
-                self.last_error = "Invalid diff format: no @@ markers found"
+            if has_at_markers:
+                # Unified diff format
+                diff_start = 0
+                for i, line in enumerate(diff_lines):
+                    if line.startswith('@@'):
+                        diff_start = i
+                        break
+                
+                # Use manual parsing to apply diff
+                diff_lines_to_apply = diff_lines[diff_start:]
+                patched = self._manual_apply_diff(original_lines, diff_lines_to_apply)
+                
+            elif has_normal_markers:
+                # Normal diff format (old <> new)
+                patched = self._apply_normal_diff(original_lines, diff_lines)
+                
+            else:
+                self.last_error = "Invalid diff format: no recognized diff markers found"
                 return None
-            
-            # Use manual parsing to apply diff
-            diff_lines_to_apply = diff_lines[diff_start:]
-            patched = self._manual_apply_diff(original_lines, diff_lines_to_apply)
             
             result = '\n'.join(patched)
             
@@ -735,6 +742,115 @@ Format: --- filepath +++ filepath @@ -start,count +start,count @@ -old +new"""
             i += 1
         
         # Copy any remaining lines from original
+        while orig_idx < len(original_lines):
+            result.append(original_lines[orig_idx])
+            orig_idx += 1
+        
+        return result
+    
+    def _apply_normal_diff(self, original_lines: list, diff_lines: list) -> list:
+        """Apply a normal diff format (old <> new).
+        
+        Handles diffs like:
+        1c1
+        < import boudica_api
+        ---
+        > import openai
+        
+        Args:
+            original_lines: List of original code lines
+            diff_lines: List of diff lines in normal format
+            
+        Returns:
+            Patched lines list
+        """
+        result = []
+        orig_idx = 0
+        i = 0
+        
+        while i < len(diff_lines):
+            line = diff_lines[i]
+            
+            # Skip empty lines and "---" separator
+            if not line.strip() or line.strip() == '---':
+                i += 1
+                continue
+            
+            # Check for change markers like "1c1", "10,12d5", "5a10,12"
+            match = re.match(r'(\d+)(?:,(\d+))?([acd])(\d+)(?:,(\d+))?', line)
+            if match:
+                cmd = match.group(3)  # 'a', 'd', or 'c'
+                
+                if cmd == 'c':  # Change
+                    # Copy lines up to the change point
+                    start_line = int(match.group(1)) - 1  # Convert to 0-indexed
+                    while orig_idx < start_line:
+                        if orig_idx < len(original_lines):
+                            result.append(original_lines[orig_idx])
+                        orig_idx += 1
+                    
+                    # Skip the old lines
+                    end_line = int(match.group(2)) if match.group(2) else int(match.group(1))
+                    end_line = end_line - 1  # Convert to 0-indexed
+                    while orig_idx <= end_line:
+                        orig_idx += 1
+                    
+                    # Add new lines (after ---separator)
+                    i += 1
+                    while i < len(diff_lines):
+                        if diff_lines[i].startswith('>'):
+                            new_line = diff_lines[i][1:].lstrip()  # Remove '>' and leading space
+                            result.append(new_line)
+                        elif diff_lines[i].startswith('<'):
+                            pass  # Skip old lines after ---
+                        elif diff_lines[i].strip() == '---':
+                            pass  # Skip the separator
+                        elif re.match(r'\d+(?:,\d+)?[acd]\d+(?:,\d+)?', diff_lines[i]):
+                            i -= 1  # Back up to process next command
+                            break
+                        else:
+                            if diff_lines[i].startswith('>'):
+                                new_line = diff_lines[i][1:].lstrip()
+                                result.append(new_line)
+                        i += 1
+                    continue
+                    
+                elif cmd == 'd':  # Delete
+                    # Copy lines up to the deletion point
+                    start_line = int(match.group(1)) - 1
+                    while orig_idx < start_line:
+                        if orig_idx < len(original_lines):
+                            result.append(original_lines[orig_idx])
+                        orig_idx += 1
+                    
+                    # Skip the deleted lines
+                    end_line = int(match.group(2)) if match.group(2) else int(match.group(1))
+                    end_line = end_line - 1
+                    while orig_idx <= end_line:
+                        orig_idx += 1
+                        
+                elif cmd == 'a':  # Add
+                    # Copy lines up to the addition point
+                    start_line = int(match.group(1)) - 1
+                    while orig_idx <= start_line:
+                        if orig_idx < len(original_lines):
+                            result.append(original_lines[orig_idx])
+                        orig_idx += 1
+                    
+                    # Add new lines
+                    i += 1
+                    while i < len(diff_lines):
+                        if diff_lines[i].startswith('>'):
+                            new_line = diff_lines[i][1:].lstrip()
+                            result.append(new_line)
+                        elif re.match(r'\d+(?:,\d+)?[acd]\d+(?:,\d+)?', diff_lines[i]):
+                            i -= 1
+                            break
+                        i += 1
+            
+            i += 1
+        
+        # Copy any remaining lines
         while orig_idx < len(original_lines):
             result.append(original_lines[orig_idx])
             orig_idx += 1
